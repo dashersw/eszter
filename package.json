@@ -1,0 +1,47 @@
+{
+  "name": "eszter",
+  "version": "0.1.0",
+  "description": "Tagged template literals for Babel AST construction with TypeScript return-type inference",
+  "author": "Armagan Amcalar <armagan@amcalar.com>",
+  "license": "MIT",
+  "keywords": [
+    "babel",
+    "ast",
+    "template-literals",
+    "codegen",
+    "typescript",
+    "babel-types",
+    "tagged-template",
+    "code-generation"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "prepublishOnly": "npm run build",
+    "test": "tsx --test 'tests/**/*.test.ts'",
+    "test:coverage": "c8 --include=src --100 tsx --test 'tests/**/*.test.ts'"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.23.0",
+    "@babel/types": "^7.23.0"
+  },
+  "devDependencies": {
+    "@babel/generator": "^7.23.0",
+    "@types/node": "^22.0.0",
+    "c8": "^11.0.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

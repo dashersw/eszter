@@ -1,0 +1,18 @@
+{
+  "name": "eszter-sample",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo": "tsx src/demo.ts"
+  },
+  "dependencies": {
+    "eszter": "file:.."
+  },
+  "devDependencies": {
+    "@babel/generator": "^7.23.0",
+    "@babel/types": "^7.23.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
