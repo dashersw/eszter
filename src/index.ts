@@ -1,9 +1,50 @@
 import * as t from '@babel/types'
-import { buildAST, buildModuleAST, coerceHole } from './core.js'
-import type { InferStatement, HoleValue, ModuleNode, ParseContext } from './types.js'
+import {
+  buildAST,
+  buildFragmentAST,
+  buildFragmentCollectionAST,
+  buildModuleAST,
+  buildWrappedExpressionAST,
+  coerceHole
+} from './core.js'
+import type {
+  FragmentBuilder,
+  FragmentCollectionBuilder,
+  FragmentCollectionKind,
+  FragmentKind,
+  InferStatement,
+  HoleValue,
+  ModuleNode,
+  ParseContext
+} from './types.js'
 
 export { id, str, num, bool, nil, clone } from './helpers.js'
-export type { InferStatement, HoleValue, ModuleNode, ParseContext } from './types.js'
+export {
+  appendToBlock,
+  insertAfter,
+  insertBefore,
+  removeNode,
+  renameIdentifier,
+  replaceExpr,
+  replaceIdentifier,
+  replaceMany,
+  replaceStmt,
+  rewrite,
+  wrapExpr,
+  wrapStmt,
+  prependToBlock
+} from './edit.js'
+export type {
+  FragmentBuilder,
+  FragmentCollectionBuilder,
+  FragmentCollectionKind,
+  FragmentKind,
+  InferStatement,
+  HoleValue,
+  ModuleNode,
+  ParseContext,
+  RewriteVisitor
+} from './types.js'
 
 const STRING_PLACEHOLDER = '%%'
 
@@ -35,6 +76,16 @@ export interface ContextualJs {
 export interface ContextualJsAll {
   (template: string, ...holes: HoleValue[]): t.Statement[]
   (strings: TemplateStringsArray, ...holes: HoleValue[]): t.Statement[]
+}
+
+export interface ContextualClass {
+  (template: string, ...holes: HoleValue[]): t.ClassDeclaration
+  (strings: TemplateStringsArray, ...holes: HoleValue[]): t.ClassDeclaration
+}
+
+export interface ContextualFunction {
+  (template: string, ...holes: HoleValue[]): t.FunctionDeclaration
+  (strings: TemplateStringsArray, ...holes: HoleValue[]): t.FunctionDeclaration
 }
 
 /**
@@ -118,6 +169,95 @@ export function jsModule(stringsOrTemplate: string | TemplateStringsArray, ...ho
   return buildModuleAST(normalizeTemplateInput(stringsOrTemplate, holes), holes)
 }
 
+/** Build a fragment node that needs a wrapper-specific parse context. */
+export function jsAs<K extends FragmentKind>(kind: K): FragmentBuilder<K> {
+  return ((stringsOrTemplate: string | TemplateStringsArray, ...holes: HoleValue[]) => {
+    return buildFragmentAST(kind, normalizeTemplateInput(stringsOrTemplate, holes), holes)
+  }) as FragmentBuilder<K>
+}
+
+/** Alias for jsAs(...) when you want a more generic name. */
+export const parseAs = jsAs
+
+/** Build a fragment collection that needs a wrapper-specific parse context. */
+export function jsAsMany<K extends FragmentCollectionKind>(kind: K): FragmentCollectionBuilder<K> {
+  return ((stringsOrTemplate: string | TemplateStringsArray, ...holes: HoleValue[]) => {
+    return buildFragmentCollectionAST(kind, normalizeTemplateInput(stringsOrTemplate, holes), holes)
+  }) as FragmentCollectionBuilder<K>
+}
+
+/** Alias for jsAsMany(...) when you want a more generic name. */
+export const parseAsMany = jsAsMany
+
+/** Build a single class method fragment. */
+export const jsMethod = jsAs('ClassMethod')
+
+/** Build a single import declaration fragment. */
+export const jsImport = jsAs('ImportDeclaration')
+
+/** Build a single named export declaration fragment. */
+export const jsExport = jsAs('ExportNamedDeclaration')
+
+/** Build a single default export declaration fragment. */
+export const jsExportDefault = jsAs('ExportDefaultDeclaration')
+
+/** Build a single export-all declaration fragment. */
+export const jsExportAll = jsAs('ExportAllDeclaration')
+
+/** Build a single class property fragment. */
+export const jsClassProp = jsAs('ClassProperty')
+
+/** Build a single private class method fragment. */
+export const jsPrivateMethod = jsAs('ClassPrivateMethod')
+
+/** Build a single private class property fragment. */
+export const jsPrivateProp = jsAs('ClassPrivateProperty')
+
+/** Build a single object method fragment. */
+export const jsObjectMethod = jsAs('ObjectMethod')
+
+/** Build a single object property fragment. */
+export const jsProp = jsAs('ObjectProperty')
+
+/** Alias for jsProp when object-property naming reads better at the call site. */
+export const jsObjectProp = jsProp
+
+/** Build a single variable declarator fragment. */
+export const jsDeclarator = jsAs('VariableDeclarator')
+
+/** Build a single parameter/pattern fragment. */
+export const jsPattern = jsAs('Pattern')
+
+/** Build a single object-pattern fragment. */
+export const jsObjectPattern = jsAs('ObjectPattern')
+
+/** Build a single array-pattern fragment. */
+export const jsArrayPattern = jsAs('ArrayPattern')
+
+/** Build a single assignment-pattern fragment. */
+export const jsAssignmentPattern = jsAs('AssignmentPattern')
+
+/** Build a single rest-element fragment. */
+export const jsRest = jsAs('RestElement')
+
+/** Alias for jsPattern when parameter naming reads better at the call site. */
+export const jsParam = jsPattern
+
+/** Build a class-body member list. */
+export const jsClassBody = jsAsMany('ClassBody')
+
+/** Build a module-body statement/declaration list. */
+export const jsModuleBody = jsAsMany('ModuleBody')
+
+/** Build an object-member list. */
+export const jsObjectBody = jsAsMany('ObjectBody')
+
+/** Build a function parameter list. */
+export const jsParams = jsAsMany('Params')
+
+/** Build an array element list. */
+export const jsArrayElements = jsAsMany('ArrayElements')
+
 /**
  * Build a single AST **expression** from a template string.
  *
@@ -151,6 +291,43 @@ export function jsExpr(stringsOrTemplate: string | TemplateStringsArray, ...hole
     )
   }
   return stmt.expression
+}
+
+/** Build a single object expression with an explicit object-focused name. */
+export function jsObjectExpr(template: string, ...holes: HoleValue[]): t.ObjectExpression
+export function jsObjectExpr(strings: TemplateStringsArray, ...holes: HoleValue[]): t.ObjectExpression
+export function jsObjectExpr(
+  stringsOrTemplate: string | TemplateStringsArray,
+  ...holes: HoleValue[]
+): t.ObjectExpression {
+  return buildWrappedExpressionAST('ObjectExpression', normalizeTemplateInput(stringsOrTemplate, holes), holes)
+}
+
+/** Build a single array expression with an explicit array-focused name. */
+export function jsArrayExpr(template: string, ...holes: HoleValue[]): t.ArrayExpression
+export function jsArrayExpr(strings: TemplateStringsArray, ...holes: HoleValue[]): t.ArrayExpression
+export function jsArrayExpr(
+  stringsOrTemplate: string | TemplateStringsArray,
+  ...holes: HoleValue[]
+): t.ArrayExpression {
+  return buildWrappedExpressionAST('ArrayExpression', normalizeTemplateInput(stringsOrTemplate, holes), holes)
+}
+
+/** Build a single class declaration with an explicit class-focused name. */
+export function jsClass(template: string, ...holes: HoleValue[]): t.ClassDeclaration
+export function jsClass(strings: TemplateStringsArray, ...holes: HoleValue[]): t.ClassDeclaration
+export function jsClass(stringsOrTemplate: string | TemplateStringsArray, ...holes: HoleValue[]): t.ClassDeclaration {
+  return js(stringsOrTemplate as string & TemplateStringsArray, ...holes) as t.ClassDeclaration
+}
+
+/** Build a single function declaration with an explicit function-focused name. */
+export function jsFunction(template: string, ...holes: HoleValue[]): t.FunctionDeclaration
+export function jsFunction(strings: TemplateStringsArray, ...holes: HoleValue[]): t.FunctionDeclaration
+export function jsFunction(
+  stringsOrTemplate: string | TemplateStringsArray,
+  ...holes: HoleValue[]
+): t.FunctionDeclaration {
+  return js(stringsOrTemplate as string & TemplateStringsArray, ...holes) as t.FunctionDeclaration
 }
 
 /**

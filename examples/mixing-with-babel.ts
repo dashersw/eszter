@@ -5,13 +5,14 @@
  * This example shows the modes of mixing:
  *
  *   1. Raw t.* nodes as holes — pass any existing node directly into a template.
- *   2. eszter output as input to t.* — the result of js/jsAll is a t.Node.
+ *   2. eszter output as input to t.* — the result of js/jsAll/jsMethod is a t.Node.
  *   3. Composing at any granularity — use eszter where it helps, raw t.* where it doesn't.
  *   4. Primitive holes — pass strings/numbers/booleans directly without helpers.
- *   5. tpl`` — build template literals for generated code without escaping backticks.
+ *   5. Fragment helpers — parse node kinds and member collections that are not standalone statements.
+ *   6. tpl`` — build template literals for generated code without escaping backticks.
  */
 import * as t from '@babel/types'
-import { js, jsAll, jsExpr, id, tpl, clone } from '../src/index.js'
+import { js, jsAll, jsExpr, jsMethod, jsObjectBody, jsObjectExpr, id, tpl, clone } from '../src/index.js'
 import { print } from './_print.js'
 
 // ─── 1. Raw t.* nodes as holes ────────────────────────────────────────────────
@@ -46,6 +47,18 @@ const method = t.classMethod(
   t.blockStatement([guardStmt, assignStmt])
 )
 print('eszter stmts inside raw classMethod', method)
+
+// Or build the class method directly as a fragment.
+const methodFragment = jsMethod`${id('onUpdate')}(value, change) {
+  if (!this.${id('__container')}) {
+    this.${id('__container')} = this.$(${'.root'});
+  }
+  this.${id('__prev')} = value;
+}`
+print(
+  'jsMethod fragment inside class',
+  t.classDeclaration(t.identifier('Widget'), null, t.classBody([methodFragment]), [])
+)
 
 // ─── 3. Fine-grained composition ─────────────────────────────────────────────
 
@@ -108,7 +121,21 @@ const defaultDecl = js`var prev = ${null};`
 // → var prev = null;
 print('primitive null hole', defaultDecl)
 
-// ─── 5. tpl`` — template literals in generated code ──────────────────────────
+// ─── 5. Fragment helpers — node kinds with special parse contexts ────────────
+
+const fragmentClass = t.classDeclaration(t.identifier('FragmentDemo'), null, t.classBody([methodFragment]), [])
+print('fragment helper result is still raw Babel-compatible', fragmentClass)
+
+const objectBody = jsObjectBody`
+  enabled: true,
+  render() { return 1; }
+`
+print('jsObjectBody members inside raw objectExpression', t.objectExpression(objectBody))
+
+const objectExpr = jsObjectExpr`{ enabled: true, render() { return 1; } }`
+print('jsObjectExpr full node', objectExpr)
+
+// ─── 6. tpl`` — template literals in generated code ──────────────────────────
 
 // When the code you're generating contains a template literal, use tpl`` to
 // build the inner t.TemplateLiteral as a node, then pass it as a hole.

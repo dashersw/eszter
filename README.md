@@ -1,6 +1,6 @@
 # eszter
 
-Write Babel AST the way you write code.
+Write Babel AST the way you write code, including fragment shapes like class methods and object properties.
 
 ```ts
 import { js, jsAll, jsExpr, id, tpl } from 'eszter'
@@ -173,6 +173,9 @@ The context is only used to make the snippet syntactically valid during parsing.
 ### `jsModule` — top-level module code
 
 Use `jsModule` when the source contains top-level `import` / `export` declarations.
+If you want a single declaration or a reusable module-body list instead of a
+whole parse result, use `jsImport`, `jsExport`, `jsExportDefault`,
+`jsExportAll`, or `jsModuleBody`.
 
 ```ts
 import { id, jsModule, str } from 'eszter'
@@ -194,6 +197,175 @@ const dynamic = jsModule(
 
 It returns module-body nodes: `t.Statement | t.ModuleDeclaration`.
 
+```ts
+import { id, jsExport, jsExportDefault, jsImport, jsModuleBody } from 'eszter'
+
+const importDecl = jsImport`import data from ${'./dep'};`
+const namedExport = jsExport`export const ${id('value')} = 1`
+const defaultExport = jsExportDefault`export default data`
+const body = jsModuleBody`
+  import data from './dep';
+  export default data;
+`
+```
+
+---
+
+### `jsAs(kind)` / `parseAs(kind)` — fragment parsing in context
+
+Some Babel node kinds are not valid standalone statements or expressions. For
+those cases, use fragment parsers that wrap your snippet in the right syntactic
+context, parse it, then extract the node you actually wanted.
+
+```ts
+import { id, jsAs } from 'eszter'
+
+const buildMethod = jsAs('ClassMethod')
+const method = buildMethod`${id('render')}(value, change) {
+  return value ?? change;
+}`
+```
+
+Supported fragment kinds today:
+
+- `ImportDeclaration`
+- `ExportNamedDeclaration`
+- `ExportDefaultDeclaration`
+- `ExportAllDeclaration`
+- `ClassMethod`
+- `ClassProperty`
+- `ClassPrivateMethod`
+- `ClassPrivateProperty`
+- `ObjectMethod`
+- `ObjectProperty`
+- `VariableDeclarator`
+- `Pattern`
+- `ObjectPattern`
+- `ArrayPattern`
+- `AssignmentPattern`
+- `RestElement`
+
+`parseAs(kind)` is an alias for `jsAs(kind)`.
+
+---
+
+### `jsAsMany(kind)` / `parseAsMany(kind)` — collection fragments
+
+Some Babel APIs want an inner list rather than a full wrapper node. Use
+collection fragment parsers when you want class members, object members,
+module bodies, parameter lists, or array elements directly.
+
+```ts
+import { jsAsMany } from 'eszter'
+
+const moduleBody = jsAsMany('ModuleBody')`
+  import data from './dep';
+  export default data;
+`
+
+const classBody = jsAsMany('ClassBody')`
+  state = null
+  render() { return 1; }
+`
+
+const objectBody = jsAsMany('ObjectBody')`
+  enabled: true,
+  render() { return 1; }
+`
+```
+
+Supported collection kinds today:
+
+- `ModuleBody`
+- `ClassBody`
+- `ObjectBody`
+- `Params`
+- `ArrayElements`
+
+`parseAsMany(kind)` is an alias for `jsAsMany(kind)`.
+
+---
+
+### Fragment aliases — common Babel builder scenarios
+
+Use the dedicated aliases when they read better than the generic `jsAs(...)`
+form:
+
+```ts
+import {
+  id,
+  jsArrayElements,
+  jsArrayPattern,
+  jsArrayExpr,
+  jsAssignmentPattern,
+  jsClass,
+  jsClassBody,
+  jsClassProp,
+  jsDeclarator,
+  jsExport,
+  jsExportAll,
+  jsExportDefault,
+  jsFunction,
+  jsImport,
+  jsMethod,
+  jsModuleBody,
+  jsObjectBody,
+  jsObjectExpr,
+  jsObjectMethod,
+  jsObjectPattern,
+  jsParams,
+  jsPattern,
+  jsPrivateMethod,
+  jsPrivateProp,
+  jsProp,
+  jsRest
+} from 'eszter'
+
+const method = jsMethod`${id('render')}(value, change) {
+  return value ?? change;
+}`
+
+const importDecl = jsImport`import { ${id('foo')} as ${id('bar')} } from ${'./dep'};`
+const namedExport = jsExport`export const ${id('value')} = 1`
+const defaultExport = jsExportDefault`export default function ${id('load')}() {}`
+const exportAll = jsExportAll`export * from ${'./shared'}`
+const classProp = jsClassProp`${id('state')} = null`
+const privateMethod = jsPrivateMethod`#${id('renderInternal')}(value) { return value; }`
+const privateProp = jsPrivateProp`#${id('cache')} = new Map()`
+const objectMethod = jsObjectMethod`${id('load')}(item) { return item.id; }`
+const prop = jsProp`${id('enabled')}: true`
+const declarator = jsDeclarator`${id('answer')} = 42`
+const pattern = jsPattern`{ id, label = fallback }`
+const objectPattern = jsObjectPattern`{ id, label = fallback }`
+const arrayPattern = jsArrayPattern`[first, second]`
+const assignmentPattern = jsAssignmentPattern`${id('value')} = 1`
+const rest = jsRest`...items`
+const classBody = jsClassBody`
+  state = null
+  render() { return 1; }
+`
+const moduleBody = jsModuleBody`
+  import data from './dep';
+  export default data;
+`
+const objectBody = jsObjectBody`
+  enabled: true,
+  render() { return 1; }
+`
+const params = jsParams`value, { id }, ...rest`
+const elements = jsArrayElements`1, value, ...rest`
+const objectExpr = jsObjectExpr`{ enabled: true, render() { return 1; } }`
+const arrayExpr = jsArrayExpr`[1, value, ...rest]`
+
+const classDecl = jsClass`class Example { render(value) { return value; } }`
+const fnDecl = jsFunction`function render(value) { return value; }`
+```
+
+These helpers are especially useful when raw Babel would otherwise require
+builder towers like `t.importDeclaration(...)`, `t.exportNamedDeclaration(...)`,
+`t.classMethod(...)`, `t.classBody([...])`, `t.objectExpression([...])`,
+`t.objectProperty(...)`, or `t.variableDeclarator(...)`.
+
 ---
 
 ### `jsExpr` — single expression
@@ -212,6 +384,59 @@ const attr: t.Expression = jsExpr('%%.getAttribute(%%)', el, str('data-id'))
 ```
 
 Throws if the template is not a single expression statement.
+
+---
+
+### Edit helpers — reshape existing AST
+
+`eszter` can also modify existing Babel subtrees without mutating the original
+node. These helpers are intentionally local and clone-first; they are not a
+full codemod framework.
+
+```ts
+import {
+  appendToBlock,
+  insertBefore,
+  js,
+  jsExpr,
+  renameIdentifier,
+  replaceExpr,
+  replaceIdentifier,
+  replaceMany,
+  wrapStmt
+} from 'eszter'
+import * as t from '@babel/types'
+
+const rawExpr = jsExpr`state.todos`
+const wrappedExpr = replaceExpr(rawExpr, current => jsExpr`${current}.__getTarget || ${current}`)
+
+const originalStmt = js`row.textContent = value;`
+const expanded = replaceMany(originalStmt, current => [js`if (!row) { return; }`, current])
+const guarded = wrapStmt(originalStmt, current => t.ifStatement(t.identifier('row'), t.blockStatement([current])))
+
+const renamed = renameIdentifier(jsExpr`item.id === itemId`, 'item', 'row')
+const replaced = replaceIdentifier(jsExpr`item.id === selectedId`, 'selectedId', jsExpr`this.state.selected.id`)
+
+const block = t.blockStatement([js`sync();`, js`render();`])
+const nextBlock = appendToBlock(block, js`cleanup();`)
+const inserted = insertBefore(block, block.body[1], js`prepare();`)
+```
+
+Available helpers:
+
+- `replaceExpr`
+- `replaceStmt`
+- `replaceMany`
+- `wrapExpr`
+- `wrapStmt`
+- `appendToBlock`
+- `prependToBlock`
+- `insertBefore`
+- `insertAfter`
+- `removeNode`
+- `rewrite`
+- `renameIdentifier`
+- `replaceIdentifier`
 
 ---
 
@@ -341,6 +566,19 @@ const method = t.classMethod(
 )
 ```
 
+When a node shape has a dedicated fragment helper, prefer that first:
+
+```ts
+import { id, jsMethod } from 'eszter'
+
+const method = jsMethod`${id('onUpdate')}(value, change) {
+  if (!this.${id('__container')}) {
+    this.${id('__container')} = this.$(${'.root'});
+  }
+  this.${id('__prev')} = value;
+}`
+```
+
 ---
 
 ## Known limitations
@@ -353,6 +591,12 @@ const method = t.classMethod(
 
 **String-call placeholders** — `%%` is reserved as the placeholder marker in the string API. The number of `%%` markers must match the number of holes you pass.
 
+**Fragment APIs parse in wrapper contexts** — helpers like `jsMethod` and
+`jsProp` work by parsing your snippet in a synthetic wrapper such as a class,
+object literal, or function parameter list, then extracting the requested node.
+That makes them syntax-driven helpers for Babel nodes, not source-preserving
+edit tools.
+
 ---
 
 ## Examples
@@ -364,6 +608,9 @@ See the [`examples/`](./examples) folder for complete, runnable examples coverin
 - [`rerender-block.ts`](./examples/rerender-block.ts) — multi-statement rerender logic
 - [`array-observer.ts`](./examples/array-observer.ts) — building a full observer class method
 - [`find-index-lookup.ts`](./examples/find-index-lookup.ts) — array index lookups with ternaries
+- [`module-fragments.ts`](./examples/module-fragments.ts) — real module assembly, string-call helpers, and `parseAs` / `parseAsMany`
+- [`fragments.ts`](./examples/fragments.ts) — module declarations, class members, object properties, patterns, and declarators
+- [`edit-existing.ts`](./examples/edit-existing.ts) — clone-first subtree replacement and block editing
 - [`mixing-with-babel.ts`](./examples/mixing-with-babel.ts) — combining eszter with raw `@babel/types`
 
 ---

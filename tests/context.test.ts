@@ -20,6 +20,11 @@ describe('jsInContext', () => {
     assert.equal(stmt.type, 'IfStatement')
     assertCode(stmt, 'if (stop) {\n  break done;\n}')
   })
+
+  it('throws when more than one statement is produced', () => {
+    const jsOuter = jsInContext({ continueLabels: ['outer'] })
+    assert.throws(() => jsOuter`continue outer; continue outer;` as unknown, /exactly one statement, got 2/)
+  })
 })
 
 describe('jsAllInContext', () => {
