@@ -1,6 +1,6 @@
 {
   "name": "eszter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Tagged template literals for Babel AST construction with TypeScript return-type inference",
   "author": "Armagan Amcalar <armagan@amcalar.com>",
   "license": "MIT",
