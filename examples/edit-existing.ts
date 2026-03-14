@@ -6,14 +6,18 @@
  */
 import * as t from '@babel/types'
 import {
+  appendToBody,
   appendToBlock,
   insertBefore,
   js,
+  jsBlockBody,
   jsExpr,
   renameIdentifier,
   replaceExpr,
+  replaceBody,
   replaceIdentifier,
   replaceMany,
+  withBody,
   wrapStmt
 } from '../src/index.js'
 import { print } from './_print.js'
@@ -34,6 +38,32 @@ print('wrapStmt', guardedStmt)
 const block = t.blockStatement([js`sync();`, js`render();`])
 print('appendToBlock', appendToBlock(block, js`cleanup();`))
 print('insertBefore', insertBefore(block, block.body[1], js`prepare();`))
+
+const method = js`class Widget { render() { sync(); } }` as t.ClassDeclaration
+const renderMethod = method.body.body[0] as t.ClassMethod
+print(
+  'jsBlockBody',
+  jsBlockBody`
+  if (!ready) return;
+  sync();
+`
+)
+print('appendToBody', appendToBody(renderMethod, js`cleanup();`))
+print(
+  'replaceBody',
+  replaceBody(
+    renderMethod,
+    jsBlockBody`
+    const value = load();
+    if (!value) return;
+    render(value);
+  `
+  )
+)
+print(
+  'withBody',
+  withBody(renderMethod, body => [js`if (!this.rendered_) return;`, ...body, js`cleanup();`])
+)
 
 const renamedExpr = renameIdentifier(jsExpr`item.id === itemId`, 'item', 'row')
 print('renameIdentifier', t.expressionStatement(renamedExpr))

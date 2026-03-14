@@ -128,6 +128,8 @@ Throws if the template contains more than one statement (use `jsAll` instead).
 ### `jsAll` — multiple statements
 
 Returns `t.Statement[]`. Use this for blocks of two or more statements.
+When the statements are specifically intended for a function, method, or block
+body, `jsBlockBody` is an alias with a more explicit name.
 
 ```ts
 import { jsAll, id, str, bool } from 'eszter'
@@ -145,6 +147,15 @@ const stmts: t.Statement[] = jsAll`
 
 ```ts
 const stmts = jsAll('var %% = %%; if (!%%) { return; }', id('el'), init, id('el'))
+```
+
+```ts
+import { jsBlockBody } from 'eszter'
+
+const body = jsBlockBody`
+  if (!this.rendered_) return;
+  sync();
+`
 ```
 
 ---
@@ -395,14 +406,19 @@ full codemod framework.
 
 ```ts
 import {
+  appendToBody,
   appendToBlock,
   insertBefore,
   js,
+  jsBlockBody,
   jsExpr,
+  jsMethod,
   renameIdentifier,
+  replaceBody,
   replaceExpr,
   replaceIdentifier,
   replaceMany,
+  withBody,
   wrapStmt
 } from 'eszter'
 import * as t from '@babel/types'
@@ -420,13 +436,30 @@ const replaced = replaceIdentifier(jsExpr`item.id === selectedId`, 'selectedId',
 const block = t.blockStatement([js`sync();`, js`render();`])
 const nextBlock = appendToBlock(block, js`cleanup();`)
 const inserted = insertBefore(block, block.body[1], js`prepare();`)
+
+const renderMethod = jsMethod`render() { sync(); }`
+const appended = appendToBody(renderMethod, js`cleanup();`)
+const replacedBody = replaceBody(
+  renderMethod,
+  jsBlockBody`
+  const value = load();
+  if (!value) return;
+  render(value);
+`
+)
+const transformed = withBody(renderMethod, body => [js`if (!this.rendered_) return;`, ...body])
 ```
 
 Available helpers:
 
+- `jsBlockBody`
+- `appendToBody`
+- `prependToBody`
 - `replaceExpr`
 - `replaceStmt`
+- `replaceBody`
 - `replaceMany`
+- `withBody`
 - `wrapExpr`
 - `wrapStmt`
 - `appendToBlock`
@@ -610,7 +643,7 @@ See the [`examples/`](./examples) folder for complete, runnable examples coverin
 - [`find-index-lookup.ts`](./examples/find-index-lookup.ts) — array index lookups with ternaries
 - [`module-fragments.ts`](./examples/module-fragments.ts) — real module assembly, string-call helpers, and `parseAs` / `parseAsMany`
 - [`fragments.ts`](./examples/fragments.ts) — module declarations, class members, object properties, patterns, and declarators
-- [`edit-existing.ts`](./examples/edit-existing.ts) — clone-first subtree replacement and block editing
+- [`edit-existing.ts`](./examples/edit-existing.ts) — clone-first subtree replacement, block editing, and body composition
 - [`mixing-with-babel.ts`](./examples/mixing-with-babel.ts) — combining eszter with raw `@babel/types`
 
 ---

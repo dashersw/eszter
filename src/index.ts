@@ -20,16 +20,20 @@ import type {
 
 export { id, str, num, bool, nil, clone } from './helpers.js'
 export {
+  appendToBody,
   appendToBlock,
   insertAfter,
   insertBefore,
+  prependToBody,
   removeNode,
   renameIdentifier,
   replaceExpr,
   replaceIdentifier,
+  replaceBody,
   replaceMany,
   replaceStmt,
   rewrite,
+  withBody,
   wrapExpr,
   wrapStmt,
   prependToBlock
@@ -154,6 +158,9 @@ export function jsAll(strings: TemplateStringsArray, ...holes: HoleValue[]): t.S
 export function jsAll(stringsOrTemplate: string | TemplateStringsArray, ...holes: HoleValue[]): t.Statement[] {
   return buildAST(normalizeTemplateInput(stringsOrTemplate, holes), holes)
 }
+
+/** Alias for jsAll when the statements are intended for a block or method body. */
+export const jsBlockBody = jsAll
 
 /** Build multiple statements with explicit parse context for labeled control flow. */
 export function jsAllInContext(context: ParseContext): ContextualJsAll {

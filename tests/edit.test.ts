@@ -5,19 +5,24 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import * as t from '@babel/types'
 import {
+  appendToBody,
   appendToBlock,
   insertAfter,
   insertBefore,
   js,
+  jsBlockBody,
   jsExpr,
+  prependToBody,
   prependToBlock,
   removeNode,
   renameIdentifier,
+  replaceBody,
   replaceExpr,
   replaceIdentifier,
   replaceMany,
   replaceStmt,
   rewrite,
+  withBody,
   wrapExpr,
   wrapStmt
 } from '../src/index.js'
@@ -102,6 +107,55 @@ describe('block editing helpers', () => {
     assert.throws(() => insertBefore(block, other, js`prepare();`), /not found in block body/)
     assert.throws(() => insertAfter(block, other, js`prepare();`), /not found in block body/)
     assert.throws(() => removeNode(block, other), /not found in block body/)
+  })
+})
+
+describe('body composition helpers', () => {
+  it('jsBlockBody aliases jsAll for block-oriented statement lists', () => {
+    const body = jsBlockBody`
+      const value = load();
+      if (!value) return;
+    `
+
+    assert.equal(body.length, 2)
+    assertCode(body[0], 'const value = load();')
+    assertCode(body[1], 'if (!value) return;')
+  })
+
+  it('appendToBody and prependToBody compose around method and function bodies', () => {
+    const method = js`class Example { render() { sync(); } }` as t.ClassDeclaration
+    const render = method.body.body[0] as t.ClassMethod
+    const fn = js`function load() { render(); }` as t.FunctionDeclaration
+
+    const appended = appendToBody(render, js`cleanup();`)
+    const prepended = prependToBody(fn, js`if (!ready) { return; }`)
+
+    assertCode(appended, 'render() {\n  sync();\n  cleanup();\n}')
+    assertCode(prepended, 'function load() {\n  if (!ready) {\n    return;\n  }\n  render();\n}')
+    assertCode(render, 'render() {\n  sync();\n}')
+    assertCode(fn, 'function load() {\n  render();\n}')
+  })
+
+  it('replaceBody and withBody return clone-first rewrites', () => {
+    const method = js`class Example { render() { sync(); render(); } }` as t.ClassDeclaration
+    const render = method.body.body[0] as t.ClassMethod
+    const arrow = t.arrowFunctionExpression([], t.blockStatement([js`sync();`]))
+
+    const replaced = replaceBody(render, [js`prepare();`, js`render();`])
+    const transformed = withBody(arrow, body => [js`if (!ready) { return; }`, ...body, js`cleanup();`])
+
+    assertCode(replaced, 'render() {\n  prepare();\n  render();\n}')
+    assertCode(transformed, '() => {\n  if (!ready) {\n    return;\n  }\n  sync();\n  cleanup();\n}')
+    assertCode(render, 'render() {\n  sync();\n  render();\n}')
+    assertCode(arrow, '() => {\n  sync();\n}')
+  })
+
+  it('body helpers throw for expression-bodied arrows', () => {
+    const arrow = t.arrowFunctionExpression([], t.identifier('value'))
+
+    assert.throws(() => appendToBody(arrow, js`cleanup();`), /block-bodied function or method/)
+    assert.throws(() => replaceBody(arrow, [js`cleanup();`]), /block-bodied function or method/)
+    assert.throws(() => withBody(arrow, body => body), /block-bodied function or method/)
   })
 })
 

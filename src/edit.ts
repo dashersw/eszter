@@ -2,6 +2,14 @@ import * as t from '@babel/types'
 import type { RewriteVisitor } from './types.js'
 
 type ReplaceInput<T extends t.Node> = T | ((node: T) => T)
+type BodyStatementsInput = readonly t.Statement[] | ((body: readonly t.Statement[]) => readonly t.Statement[])
+type BodyOwner =
+  | t.FunctionDeclaration
+  | t.FunctionExpression
+  | t.ArrowFunctionExpression
+  | t.ClassMethod
+  | t.ClassPrivateMethod
+  | t.ObjectMethod
 
 function cloneNode<T extends t.Node>(node: T): T {
   return t.cloneNode(node, true)
@@ -15,6 +23,39 @@ function resolveReplacement<T extends t.Node>(node: T, next: ReplaceInput<T>): T
 
 function cloneStatements(statements: readonly t.Statement[]): t.Statement[] {
   return statements.map(statement => cloneNode(statement))
+}
+
+function cloneDirectives(block: t.BlockStatement): t.Directive[] {
+  return block.directives.map(directive => cloneNode(directive))
+}
+
+function createBlockWithStatements(block: t.BlockStatement, statements: readonly t.Statement[]): t.BlockStatement {
+  const next = t.blockStatement(cloneStatements(statements))
+  next.directives = cloneDirectives(block)
+  return next
+}
+
+function getBlockBody<T extends BodyOwner>(node: T): t.BlockStatement {
+  if (t.isArrowFunctionExpression(node) && !t.isBlockStatement(node.body)) {
+    throw new Error(`eszter: body helpers require a block-bodied function or method.`)
+  }
+  return node.body as t.BlockStatement
+}
+
+function updateBody<T extends BodyOwner>(node: T, next: BodyStatementsInput): T {
+  const copy = cloneNode(node)
+  const block = getBlockBody(copy)
+  const current = cloneStatements(block.body)
+  const statements = typeof next === 'function' ? next(current) : next
+  const nextBlock = createBlockWithStatements(block, statements)
+
+  if (t.isArrowFunctionExpression(copy)) {
+    copy.body = nextBlock
+    return copy
+  }
+
+  copy.body = nextBlock
+  return copy
 }
 
 function findStatementIndex(block: t.BlockStatement, target: t.Statement): number {
@@ -75,6 +116,25 @@ export function wrapExpr(node: t.Expression, wrap: (node: t.Expression) => t.Exp
 
 export function wrapStmt<T extends t.Statement>(node: T, wrap: (node: T) => t.Statement): t.Statement {
   return cloneNode(wrap(cloneNode(node)))
+}
+
+export function withBody<T extends BodyOwner>(
+  node: T,
+  edit: (body: readonly t.Statement[]) => readonly t.Statement[]
+): T {
+  return updateBody(node, edit)
+}
+
+export function replaceBody<T extends BodyOwner>(node: T, body: BodyStatementsInput): T {
+  return updateBody(node, body)
+}
+
+export function appendToBody<T extends BodyOwner>(node: T, ...statements: readonly t.Statement[]): T {
+  return updateBody(node, body => [...body, ...cloneStatements(statements.flat())])
+}
+
+export function prependToBody<T extends BodyOwner>(node: T, ...statements: readonly t.Statement[]): T {
+  return updateBody(node, body => [...cloneStatements(statements.flat()), ...body])
 }
 
 export function appendToBlock(block: t.BlockStatement, ...statements: readonly t.Statement[]): t.BlockStatement {
